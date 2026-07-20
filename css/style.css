@@ -43,11 +43,18 @@ body {
   padding: 8px 0 12px;
 }
 .header h1 { font-size: 1.3rem; }
+.header-actions { display: flex; align-items: center; gap: 6px; }
 .icon-btn {
   background: none; border: none; font-size: 1.4rem; cursor: pointer;
   padding: 6px; border-radius: 10px;
 }
 .icon-btn:active { background: rgba(0,0,0,.06); }
+.install-btn {
+  background: var(--water-deep); color: #fff; border: none;
+  border-radius: 999px; padding: 7px 14px; font-size: .82rem; font-weight: 700;
+  cursor: pointer;
+}
+.install-btn[hidden] { display: none; }
 
 /* ===== グラス ===== */
 .glass-section { text-align: center; margin: 8px 0 24px; }
@@ -247,6 +254,17 @@ body {
   background: var(--bg); color: var(--ink);
 }
 #reminderIntervalField[hidden] { display: none; }
+
+/* クイックボタン量の編集 */
+.preset-edit { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 18px; }
+.preset-edit input {
+  font-size: 1rem; padding: 10px; border-radius: 10px; text-align: center;
+  border: 1px solid rgba(100,116,139,.4); background: var(--bg); color: var(--ink);
+}
+
+/* データ操作ボタン群 */
+.data-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.data-actions .link-btn { margin-top: 0; }
 
 /* ===== トースト ===== */
 .toast {

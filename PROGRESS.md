@@ -6,6 +6,8 @@
 - 追記: PNGアイコン(192/512/180)を生成。SVGラスタライザが無いため icons/make_icons.py でPILから水滴デザインを直接描画(4x supersampling→LANCZOS縮小)。3サイズとも200配信・目視で意図どおりを確認。
 - 追記2（機能拡張）: 飲水リマインダー通知（Notification API、アプリ表示中に設定間隔でsetInterval発火・目標未達時のみ通知）と、CSV書き出し（全記録を「日付,時刻,量(ml)」でBOM付きダウンロード）を実装。設定モーダルにトグルスイッチ＋間隔選択＋書き出しボタンを追加。テストを追加し計36項目すべてpass。
 - 追記3（公開）: 独立gitリポジトリ化しGitHub Pages公開。https://sloppythinker.github.io/water-tracker/ で稼働確認（全アセット200）。commitは他PWAと同じ noreply メール（278384288+sloppythinker@users.noreply.github.com）を使用（メール非公開制限のため）。
+- 追記4（改善7点）: (1)JSONバックアップ書き出し/復元(id重複排除マージ+不正入力の正規化normalize) (2)SWをnetwork-first(HTML/CSS/JS)+cache-first(画像)に変更しCACHE v2へ、PNGもprecache (3)visibilitychange/focus再描画+深夜0時ティックで日付またぎ追従 (4)addEntryごとにリマインダータイマーを引き直し「最後に飲んでから」起点に (5)a11y=グラスの動的aria-label・percent/remainingにaria-live・toastにrole=status (6)クイックボタンの量を設定でカスタム化(委譲クリックで再描画対応) (7)beforeinstallpromptを捕捉してヘッダーにインストールボタン。
+- 結果: テストを追加し計51項目すべてpass。Node/静的サーブで読み込みエラー無し・全アセット200。GitHub Pagesへデプロイ済み。
 - 次のステップ:
-  - リマインダーはアプリを開いている間のみ動作（静的Pagesにサーバーpushが無いため）。バックグラウンド通知が必要なら Web Push + サービス（別途バックエンド）が要る。
+  - リマインダーはアプリを開いている間のみ動作（静的Pagesにサーバーpushが無いため）。バックグラウンド通知が必要なら Web Push + バックエンドが要る。
   - （任意）月次サマリーや目標達成ストリークなどの拡張。

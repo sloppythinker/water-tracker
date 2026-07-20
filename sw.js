@@ -1,4 +1,4 @@
-const CACHE = 'mizulog-v1';
+const CACHE = 'mizulog-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,9 @@ const ASSETS = [
   './js/app.js',
   './manifest.json',
   './icons/icon.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-180.png',
 ];
 
 self.addEventListener('install', (e) => {
@@ -19,13 +22,28 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// アイコン/画像は cache-first（変わらない前提で高速に）
+function cacheFirst(req) {
+  return caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+    const copy = res.clone();
+    caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+    return res;
+  }));
+}
+
+// HTML/CSS/JS は network-first（デプロイした更新が確実に届く／オフライン時はキャッシュ）
+function networkFirst(req) {
+  return fetch(req).then((res) => {
+    const copy = res.clone();
+    caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+    return res;
+  }).catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')));
+}
+
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
-      return res;
-    }).catch(() => cached))
-  );
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  const isAsset = /\.(png|svg|jpg|jpeg|webp|ico)$/i.test(url.pathname);
+  e.respondWith(isAsset ? cacheFirst(req) : networkFirst(req));
 });

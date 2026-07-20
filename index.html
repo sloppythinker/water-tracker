@@ -14,7 +14,10 @@
   <div class="app">
     <header class="header">
       <h1>💧 みずログ</h1>
-      <button id="settingsBtn" class="icon-btn" aria-label="設定">⚙️</button>
+      <div class="header-actions">
+        <button id="installBtn" class="install-btn" hidden>⬇️ インストール</button>
+        <button id="settingsBtn" class="icon-btn" aria-label="設定">⚙️</button>
+      </div>
     </header>
 
     <!-- メインのグラス表示 -->
@@ -29,15 +32,15 @@
           <div class="glass-goal" id="glassGoal">/ 2000 ml</div>
         </div>
       </div>
-      <div class="percent" id="percent">0%</div>
-      <div class="remaining" id="remaining">目標まであと 2000 ml</div>
+      <div class="percent" id="percent" aria-live="polite">0%</div>
+      <div class="remaining" id="remaining" aria-live="polite">目標まであと 2000 ml</div>
     </section>
 
-    <!-- クイック追加ボタン -->
-    <section class="quick-add">
-      <button class="add-btn" data-amount="200"><span class="add-emoji">🥃</span><span class="add-ml">+200</span><span class="add-name">コップ</span></button>
-      <button class="add-btn" data-amount="350"><span class="add-emoji">🥤</span><span class="add-ml">+350</span><span class="add-name">缶</span></button>
-      <button class="add-btn" data-amount="500"><span class="add-emoji">🍶</span><span class="add-ml">+500</span><span class="add-name">ペット</span></button>
+    <!-- クイック追加ボタン（量は設定で変更可・JSで描画） -->
+    <section class="quick-add" id="quickAdd">
+      <button class="add-btn preset" data-amount="200"></button>
+      <button class="add-btn preset" data-amount="350"></button>
+      <button class="add-btn preset" data-amount="500"></button>
       <button class="add-btn" id="customBtn"><span class="add-emoji">✏️</span><span class="add-ml">自由</span><span class="add-name">入力</span></button>
     </section>
 
@@ -93,12 +96,28 @@
           <option value="180">3時間ごと</option>
         </select>
       </label>
+      <p class="setting-note">最後に飲んでからこの時間が経つと通知します（アプリを開いている間のみ）。</p>
+
+      <div class="setting-row">
+        <div class="setting-title">クイックボタンの量 (ml)</div>
+      </div>
+      <div class="preset-edit">
+        <input type="number" id="presetInput0" min="10" max="3000" step="10" inputmode="numeric" aria-label="ボタン1の量">
+        <input type="number" id="presetInput1" min="10" max="3000" step="10" inputmode="numeric" aria-label="ボタン2の量">
+        <input type="number" id="presetInput2" min="10" max="3000" step="10" inputmode="numeric" aria-label="ボタン3の量">
+      </div>
 
       <div class="modal-actions">
         <button id="settingsSave" class="primary">保存</button>
         <button id="settingsClose" class="ghost">閉じる</button>
       </div>
-      <button id="exportBtn" class="link-btn">📄 記録をCSVで書き出す</button>
+
+      <div class="data-actions">
+        <button id="exportBtn" class="link-btn">📄 CSVで書き出す</button>
+        <button id="backupBtn" class="link-btn">💾 バックアップ(JSON)</button>
+        <button id="restoreBtn" class="link-btn">📥 バックアップから復元</button>
+      </div>
+      <input type="file" id="restoreFile" accept="application/json,.json" hidden>
       <button id="resetToday" class="danger-link">今日の記録をすべて消す</button>
     </div>
   </div>
@@ -118,7 +137,7 @@
     </div>
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="js/app.js"></script>
 </body>

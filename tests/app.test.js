@@ -183,5 +183,78 @@ console.log('■ リマインダーは永続化される');
   ok(raw.reminder.enabled === true && raw.reminder.intervalMin === 30, 'reminder が localStorage に保存される');
 }
 
+console.log('■ JSONバックアップの書き出し');
+{
+  const w = boot();
+  w.document.querySelector('.add-btn[data-amount="200"]').click();
+  const json = JSON.parse(w.MizuLog.buildBackup());
+  ok(json.app === 'mizulog' && json.version === 1, 'app/version が含まれる');
+  ok(json.data.days[w.MizuLog.todayKey()][0].ml === 200, 'data に記録が含まれる');
+}
+
+console.log('■ バックアップから復元（マージ・id重複排除）');
+{
+  const w = boot();
+  w.document.querySelector('.add-btn[data-amount="500"]').click(); // 既存 500
+  const backup = JSON.stringify({
+    app: 'mizulog', version: 1,
+    data: { goal: 1800, presets: [100, 250, 400], reminder: { enabled: false, intervalMin: 60 },
+      days: { [w.MizuLog.todayKey()]: [{ id: 'imported-1', ml: 333, t: new Date().toISOString() }] } },
+  });
+  const res = w.MizuLog.restoreBackup(backup, 'merge');
+  ok(res.ok === true, '復元が成功する');
+  ok(w.MizuLog.dayTotal(w.MizuLog.todayKey()) === 833, '既存500 + 取り込み333 = 833');
+  ok(w.MizuLog._state().goal === 1800, '目標が取り込み値に更新される');
+  // 同じバックアップを再度取り込んでも二重登録されない
+  w.MizuLog.restoreBackup(backup, 'merge');
+  ok(w.MizuLog.dayTotal(w.MizuLog.todayKey()) === 833, '再取り込みでも id 重複は排除される');
+}
+
+console.log('■ 不正なバックアップは弾く');
+{
+  const w = boot();
+  const res = w.MizuLog.restoreBackup('{壊れた', 'merge');
+  ok(res.ok === false, '壊れたJSONは ok:false を返す');
+}
+
+console.log('■ クイックボタン量のカスタム化');
+{
+  const w = boot();
+  w.document.getElementById('settingsBtn').click();
+  w.document.getElementById('presetInput0').value = '150';
+  w.document.getElementById('presetInput1').value = '600';
+  w.document.getElementById('presetInput2').value = '800';
+  w.document.getElementById('settingsSave').click();
+  ok(JSON.stringify(w.MizuLog._state().presets) === '[150,600,800]', 'presets が保存される');
+  const firstBtn = w.document.querySelector('#quickAdd .preset');
+  ok(firstBtn.dataset.amount === '150', 'ボタンの data-amount が更新される');
+  ok(/\+150/.test(firstBtn.textContent), 'ボタン表示が +150 になる');
+  firstBtn.click();
+  ok(w.MizuLog.dayTotal(w.MizuLog.todayKey()) === 150, 'カスタム量150で記録できる');
+}
+
+console.log('■ グラスの aria-label が現在値を反映');
+{
+  const w = boot();
+  w.document.querySelector('.add-btn[data-amount="200"]').click();
+  const label = w.document.getElementById('glass').getAttribute('aria-label');
+  ok(/200ml/.test(label) && /パーセント/.test(label), 'aria-label に現在量とパーセントが入る');
+}
+
+console.log('■ インストールボタン（beforeinstallprompt）');
+{
+  const w = boot();
+  const installBtn = w.document.getElementById('installBtn');
+  ok(installBtn.hidden === true, '初期はインストールボタンが隠れている');
+  const evt = new w.Event('beforeinstallprompt');
+  let prevented = false;
+  evt.preventDefault = () => { prevented = true; };
+  evt.prompt = () => {};
+  evt.userChoice = Promise.resolve({ outcome: 'accepted' });
+  w.dispatchEvent(evt);
+  ok(prevented === true, 'preventDefault が呼ばれる');
+  ok(installBtn.hidden === false, 'プロンプト捕捉でボタンが表示される');
+}
+
 console.log(`\n結果: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
