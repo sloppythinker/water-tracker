@@ -1,0 +1,11 @@
+{
+  "name": "water-tracker",
+  "version": "1.0.0",
+  "description": "みずログ - 毎日の水分摂取量を記録するPWA",
+  "scripts": {
+    "test": "node tests/app.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}
