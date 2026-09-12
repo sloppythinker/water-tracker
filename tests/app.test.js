@@ -256,5 +256,38 @@ console.log('■ インストールボタン（beforeinstallprompt）');
   ok(installBtn.hidden === false, 'プロンプト捕捉でボタンが表示される');
 }
 
+console.log('■ 復元の異常系と重複');
+{
+  const w = boot();
+  const api = w.MizuLog;
+  api.addEntry(200);
+  const before = api.buildBackup();
+  for (const invalid of ['null', '[]', '{}', '{"data":{}}', '{"app":"other","version":1,"data":{"days":{}}}']) {
+    ok(!api.restoreBackup(invalid, 'replace').ok, '別形式のバックアップを拒否: ' + invalid);
+  }
+  ok(api.buildBackup().replace(/"exportedAt": "[^"]+"/, '') === before.replace(/"exportedAt": "[^"]+"/, ''), '不正な復元でも既存記録を保持');
+  const entry = { id: 'duplicate', ml: 300, t: new Date().toISOString() };
+  api.restoreBackup(JSON.stringify({ days: { [api.todayKey()]: [entry, entry] } }), 'merge');
+  ok(api.dayTotal(api.todayKey()) === 500, '同じバックアップ内の重複IDを一度だけ加算');
+  const hostile = { id: '\"><img src=x onerror=alert(1)>', ml: 100, t: new Date().toISOString() };
+  api.restoreBackup(JSON.stringify({ days: { [api.todayKey()]: [hostile] } }), 'merge');
+  api.render();
+  ok(!w.document.querySelector('#logList img'), '取り込んだIDをHTMLとして解釈しない');
+}
+
+console.log('■ 日付検証・不正件数・他タブ同期');
+{
+  const w = boot(), api = w.MizuLog;
+  const record = {id:'valid',ml:200,t:'2026-09-12T00:00:00Z'};
+  const raw = JSON.stringify({days:{'2026-02-30':[record], '2026-09-12':[record,{...record,id:'bad',ml:1.5},{...record,id:'badtime',t:'broken'}]}});
+  const preview = api.previewBackup(raw);
+  ok(preview.invalid === 3 && preview.added === 1, '実在しない日付・小数・不正時刻を復元前に集計');
+  api.restoreBackup(raw,'replace');
+  ok(api.dayTotal('2026-02-30') === 0, '存在しない日付を復元しない');
+  w.localStorage.setItem(api.STORAGE_KEY, JSON.stringify({days:{[api.todayKey()]:[{...record,id:'other-tab',ml:350}]}}));
+  w.dispatchEvent(new w.StorageEvent('storage',{key:api.STORAGE_KEY}));
+  ok(api.dayTotal(api.todayKey()) === 350, '他タブの保存を現在の状態へ反映');
+}
+
 console.log(`\n結果: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

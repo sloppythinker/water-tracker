@@ -9,6 +9,10 @@
   function pad(n) { return String(n).padStart(2, '0'); }
   function dateKey(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
   function todayKey() { return dateKey(new Date()); }
+  function validDate(key) {
+    return typeof key === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(key) &&
+      Number.isFinite(Date.parse(key)) && new Date(key).toISOString().slice(0, 10) === key;
+  }
 
   // ---------- データ層 ----------
   function defaults() {
@@ -19,16 +23,17 @@
   function normalize(data) {
     const d = defaults();
     if (!data || typeof data !== 'object') return d;
-    if (typeof data.goal === 'number' && data.goal >= 200) d.goal = Math.round(data.goal);
+    if (Number.isFinite(data.goal) && data.goal >= 200) d.goal = Math.round(data.goal);
     if (data.days && typeof data.days === 'object') {
       Object.keys(data.days).forEach((k) => {
-        if (Array.isArray(data.days[k])) {
-          d.days[k] = data.days[k].filter((e) => e && typeof e.ml === 'number' && e.ml > 0 && e.id && e.t);
+        if (validDate(k) && Array.isArray(data.days[k])) {
+          d.days[k] = data.days[k].filter((e) => e && Number.isSafeInteger(e.ml) && e.ml > 0 && typeof e.id === 'string' && e.id.length > 0 && e.id.length <= 256 && typeof e.t === 'string' && Number.isFinite(Date.parse(e.t)));
         }
       });
     }
     if (data.reminder && typeof data.reminder === 'object') {
-      d.reminder = { enabled: !!data.reminder.enabled, intervalMin: Number(data.reminder.intervalMin) || 120 };
+      const interval = Number(data.reminder.intervalMin);
+      d.reminder = { enabled: !!data.reminder.enabled, intervalMin: Number.isFinite(interval) && interval >= 1 && interval <= 1440 ? interval : 120 };
     }
     if (Array.isArray(data.presets)) {
       const p = data.presets.map((n) => Math.round(Number(n))).filter((n) => Number.isFinite(n) && n > 0).slice(0, 3);
@@ -113,27 +118,59 @@
     return JSON.stringify({ app: 'mizulog', version: 1, exportedAt: new Date().toISOString(), data: state }, null, 2);
   }
 
+  function previewBackup(jsonString) {
+    const parsed = JSON.parse(jsonString);
+    const raw = parsed?.data || parsed;
+    if (!raw || !raw.days || typeof raw.days !== 'object' || Array.isArray(raw.days) ||
+        (parsed.app !== undefined && parsed.app !== 'mizulog') ||
+        (parsed.version !== undefined && parsed.version !== 1)) throw new Error('みずログのバックアップ形式ではありません');
+    const clean = normalize(raw);
+    let invalid = 0, duplicates = 0, added = 0;
+    Object.entries(raw.days).forEach(([key, values]) => {
+      const accepted = clean.days[key] || [];
+      invalid += Array.isArray(values) ? values.length - accepted.length : 1;
+      const seen = new Set(entries(key).map((e) => e.id));
+      accepted.forEach((entry) => {
+        if (seen.has(entry.id)) duplicates++;
+        else { seen.add(entry.id); added++; }
+      });
+    });
+    return { added, invalid, duplicates };
+  }
+
   // JSON文字列を取り込み、日ごとの記録を id で重複排除しながらマージする
   function restoreBackup(jsonString, mode) {
     let parsed;
     try { parsed = JSON.parse(jsonString); } catch (e) { return { ok: false, error: 'JSONを読み取れませんでした' }; }
-    const incoming = normalize(parsed && parsed.data ? parsed.data : parsed);
+    const raw = parsed && parsed.data ? parsed.data : parsed;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
+        !raw.days || typeof raw.days !== 'object' || Array.isArray(raw.days) ||
+        (parsed.app !== undefined && parsed.app !== 'mizulog') ||
+        (parsed.version !== undefined && parsed.version !== 1)) {
+      return { ok: false, error: 'みずログのバックアップ形式ではありません' };
+    }
+    const incoming = normalize(raw);
+    const next = mode === 'replace' ? incoming : normalize(state);
     if (mode === 'replace') {
-      state = incoming;
+      Object.keys(next.days).forEach((key) => {
+        const seen = new Set();
+        next.days[key] = next.days[key].filter((e) => !seen.has(e.id) && seen.add(e.id));
+      });
     } else {
       // merge: 設定は取り込み側を優先、記録は日付ごとに id で union
-      state.goal = incoming.goal;
-      state.reminder = incoming.reminder;
-      state.presets = incoming.presets;
+      next.goal = incoming.goal;
+      next.reminder = incoming.reminder;
+      next.presets = incoming.presets;
       Object.keys(incoming.days).forEach((key) => {
-        const cur = state.days[key] || [];
+        const cur = next.days[key] || [];
         const seen = new Set(cur.map((e) => e.id));
-        incoming.days[key].forEach((e) => { if (!seen.has(e.id)) cur.push(e); });
-        state.days[key] = cur;
+        incoming.days[key].forEach((e) => { if (!seen.has(e.id)) { cur.push(e); seen.add(e.id); } });
+        next.days[key] = cur;
       });
     }
+    try { save(next); } catch (e) { return { ok: false, error: '保存できませんでした。空き容量を確認してください' }; }
+    state = next;
     lastAddedId = null;
-    save(state);
     return { ok: true };
   }
 
@@ -285,7 +322,8 @@
       li.innerHTML =
         `<span class="amt">${e.ml} ml</span>` +
         `<span class="time">${fmtTime(e.t)}</span>` +
-        `<button class="del" data-id="${e.id}" aria-label="削除">✕</button>`;
+        '<button class="del" aria-label="削除">✕</button>';
+      li.querySelector('.del').dataset.id = e.id;
       els.logList.appendChild(li);
     });
 
@@ -361,7 +399,12 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        const res = restoreBackup(String(reader.result), 'merge');
+        const text = String(reader.result);
+        try {
+          const preview = previewBackup(text);
+          if (!confirm(`新規${preview.added}件を追加します。不正${preview.invalid}件・重複${preview.duplicates}件は除外します。復元しますか？`)) { els.restoreFile.value = ''; return; }
+        } catch (error) { toast(error.message); els.restoreFile.value = ''; return; }
+        const res = restoreBackup(text, 'merge');
         if (res.ok) { toast('復元しました'); els.settingsModal.hidden = true; applyReminder(); render(); }
         else { toast(res.error || '復元に失敗しました'); }
         els.restoreFile.value = '';
@@ -424,6 +467,13 @@
     // 復帰・日付またぎで表示を最新化（開きっぱなしでも今日の集計に追従）
     document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
     window.addEventListener('focus', render);
+    window.addEventListener('storage', (event) => {
+      if (event.key !== STORAGE_KEY && event.key !== null) return;
+      state = load();
+      lastAddedId = null;
+      applyReminder();
+      render();
+    });
     scheduleMidnight();
 
     // インストール導線（対応ブラウザのみ）
@@ -451,7 +501,7 @@
   const api = {
     STORAGE_KEY, todayKey, dateKey, load, save, normalize,
     addEntry, removeEntry, undoLast, setGoal, resetToday, setPresets,
-    buildCSV, buildBackup, restoreBackup, setReminder, applyReminder,
+    buildCSV, buildBackup, previewBackup, restoreBackup, setReminder, applyReminder,
     dayTotal, entries, lastSevenDays, render, init,
     _state: () => state, _reload: () => { state = load(); lastAddedId = null; },
   };
